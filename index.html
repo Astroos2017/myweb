@@ -15,31 +15,13 @@
     button{appearance:none; border:0; background:#19a0ff; color:#fff; border-radius:10px; padding:10px 14px; font-weight:600; cursor:pointer}
     .ghost{background:#eef6ff; color:#0a66b7}
     .preview{min-height:420px; display:flex; align-items:center; justify-content:center}
-    canvas{background:#fff; border-radius:8px}
+    /* 讓產生的 canvas 也有圓角、陰影（純視覺） */
+    #qrContainer canvas{border-radius:8px; box-shadow:0 2px 10px rgba(0,0,0,.06)}
     .muted{font-size:12px; color:#667}
   </style>
 
-  <!-- 載庫：先試 jsDelivr，失敗自動退回 unpkg -->
-  <script>
-    (function(){
-      function load(src){ return new Promise(function(resolve,reject){
-        var s=document.createElement('script');
-        s.src=src; s.async=true;
-        s.onload=function(){ resolve(true); };
-        s.onerror=function(){ resolve(false); };
-        document.head.appendChild(s);
-      });}
-      window.ensureQRCodeLib = async function(){
-        if (window.QRCode && window.QRCode.toCanvas) return true;
-        // 1st try: jsDelivr
-        let ok = await load("https://cdn.jsdelivr.net/npm/qrcode@1.5.3/build/qrcode.min.js");
-        if (ok && window.QRCode && window.QRCode.toCanvas) return true;
-        // 2nd try: unpkg fallback
-        ok = await load("https://unpkg.com/qrcode@1.5.3/build/qrcode.min.js");
-        return !!(window.QRCode && window.QRCode.toCanvas);
-      };
-    })();
-  </script>
+  <!-- 使用你 repo 內的 qrcodejs（本地檔，不走 CDN） -->
+  <script src="./davidshimjs-qrcodejs-04f46c6/qrcode.min.js"></script>
 </head>
 <body>
   <div class="wrap">
@@ -51,7 +33,7 @@
 
       <label for="size">尺寸 (px)</label>
       <input id="size" type="number" min="128" max="1024" step="32" value="400"/>
-      <div class="muted">建議 256–512。邊距固定為 4。</div>
+      <div class="muted">建議 256–512。邊距依套件內建；如需自訂邊距可改套件或改用 npm 版。</div>
 
       <div class="btns">
         <button id="btnGen">重新產生</button>
@@ -60,7 +42,8 @@
     </section>
 
     <section class="card preview">
-      <canvas id="canvas" width="400" height="400" aria-label="QR 預覽"></canvas>
+      <!-- 注意：davidshim 版會把 QR 畫進這個容器裡 -->
+      <div id="qrContainer" aria-label="QR 預覽"></div>
     </section>
   </div>
 
@@ -70,44 +53,49 @@
       size: document.getElementById('size'),
       btnGen: document.getElementById('btnGen'),
       btnDownload: document.getElementById('btnDownload'),
-      canvas: document.getElementById('canvas'),
+      box: document.getElementById('qrContainer'),
     };
 
-    async function drawQR() {
-      // 確保函式庫已載入（否則拋錯會是「QRCode is not defined」）
-      const ok = await window.ensureQRCodeLib();
-      if (!ok) { alert('載入 QR 函式庫失敗（可能被網路或 CDN 擋住）。'); return; }
+    let qrInstance = null;
 
+    function drawQR() {
       const text = els.text.value || '';
       const size = Math.max(128, Math.min(1024, +els.size.value || 400));
 
-      els.canvas.width = size;
-      els.canvas.height = size;
+      // 清空容器（避免舊的節點殘留）
+      els.box.innerHTML = '';
 
-      await new Promise((resolve, reject) => {
-        QRCode.toCanvas(els.canvas, text, {
-          width: size,
-          margin: 4,
-          errorCorrectionLevel: 'M',
-          color: { dark: '#000000', light: '#ffffff' }
-        }, (err) => err ? reject(err) : resolve());
+      // 以本地庫產生 QR（會自動建立 <canvas>）
+      qrInstance = new QRCode(els.box, {
+        text: text || ' ',                 // 不能是空字串，給空白以避免錯誤
+        width: size,
+        height: size,
+        colorDark: '#000000',
+        colorLight: '#ffffff',
+        correctLevel: QRCode.CorrectLevel.M
       });
     }
 
     // 事件
-    els.btnGen.addEventListener('click', () => { drawQR().catch(err => alert('產生失敗：' + err)); });
+    els.btnGen.addEventListener('click', () => {
+      try { drawQR(); } catch (err) { alert('產生失敗：' + err); }
+    });
     els.text.addEventListener('keydown', (e) => { if (e.key === 'Enter') els.btnGen.click(); });
+
     els.btnDownload.addEventListener('click', () => {
+      // 從容器裡抓出生成的 <canvas>
+      const canvas = els.box.querySelector('canvas');
+      if (!canvas) { alert('尚未產生 QR，或瀏覽器未使用 canvas 呈現。'); return; }
       try {
-        const link = document.createElement('a');
-        link.download = 'qrcode.png';
-        link.href = els.canvas.toDataURL('image/png');
-        link.click();
+        const a = document.createElement('a');
+        a.download = 'qrcode.png';
+        a.href = canvas.toDataURL('image/png');
+        a.click();
       } catch (e) { alert('下載失敗：' + e); }
     });
 
     // 首次載入自動產生一次
-    drawQR().catch(console.error);
+    drawQR();
   </script>
 </body>
 </html>
