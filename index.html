@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>超簡版 QR Code 產生器 1（無 Logo）</title>
+  <title>超簡版 QR Code 產生器（無 Logo）</title>
   <style>
     body{font-family:system-ui,-apple-system,BlinkMacSystemFont,Segoe UI,Roboto; margin:0; background:#f5f7fb; color:#111}
     .wrap{max-width:900px; margin:32px auto; padding:0 16px; display:grid; grid-template-columns: 1fr 1fr; gap:16px}
@@ -18,13 +18,34 @@
     canvas{background:#fff; border-radius:8px}
     .muted{font-size:12px; color:#667}
   </style>
-  <!-- 載入 qrcode (純前端) -->
-  <script src="https://cdn.jsdelivr.net/npm/qrcode@1.5.3/build/qrcode.min.js"></script>
+
+  <!-- 載庫：先試 jsDelivr，失敗自動退回 unpkg -->
+  <script>
+    (function(){
+      function load(src){ return new Promise(function(resolve,reject){
+        var s=document.createElement('script');
+        s.src=src; s.async=true;
+        s.onload=function(){ resolve(true); };
+        s.onerror=function(){ resolve(false); };
+        document.head.appendChild(s);
+      });}
+      window.ensureQRCodeLib = async function(){
+        if (window.QRCode && window.QRCode.toCanvas) return true;
+        // 1st try: jsDelivr
+        let ok = await load("https://cdn.jsdelivr.net/npm/qrcode@1.5.3/build/qrcode.min.js");
+        if (ok && window.QRCode && window.QRCode.toCanvas) return true;
+        // 2nd try: unpkg fallback
+        ok = await load("https://unpkg.com/qrcode@1.5.3/build/qrcode.min.js");
+        return !!(window.QRCode && window.QRCode.toCanvas);
+      };
+    })();
+  </script>
 </head>
 <body>
   <div class="wrap">
     <section class="card">
-      <h1>QR Code 產生器（含 Logo）</h1>
+      <h1>QR Code 產生器（無 Logo）</h1>
+
       <label for="text">內容文字或網址</label>
       <input id="text" type="text" placeholder="https://example.com" value="https://example.com" />
 
@@ -43,51 +64,50 @@
     </section>
   </div>
 
-<script>
-  const els = {
-    text: document.getElementById('text'),
-    size: document.getElementById('size'),
-    btnGen: document.getElementById('btnGen'),
-    btnDownload: document.getElementById('btnDownload'),
-    canvas: document.getElementById('canvas'),
-  };
+  <script>
+    const els = {
+      text: document.getElementById('text'),
+      size: document.getElementById('size'),
+      btnGen: document.getElementById('btnGen'),
+      btnDownload: document.getElementById('btnDownload'),
+      canvas: document.getElementById('canvas'),
+    };
 
-  async function drawQR() {
-    const text = els.text.value || '';
-    const size = Math.max(128, Math.min(1024, +els.size.value || 400));
+    async function drawQR() {
+      // 確保函式庫已載入（否則拋錯會是「QRCode is not defined」）
+      const ok = await window.ensureQRCodeLib();
+      if (!ok) { alert('載入 QR 函式庫失敗（可能被網路或 CDN 擋住）。'); return; }
 
-    // 設定 canvas 實體尺寸
-    els.canvas.width = size;
-    els.canvas.height = size;
+      const text = els.text.value || '';
+      const size = Math.max(128, Math.min(1024, +els.size.value || 400));
 
-    // 使用回呼版，避免某些瀏覽器 Promise 版相容性問題
-    await new Promise((resolve, reject) => {
-      QRCode.toCanvas(els.canvas, text, {
-        width: size,
-        margin: 4,
-        errorCorrectionLevel: 'M',
-        color: { dark: '#000000', light: '#ffffff' }
-      }, (err) => err ? reject(err) : resolve());
-    });
-  }
+      els.canvas.width = size;
+      els.canvas.height = size;
 
-  // 事件
-  els.btnGen.addEventListener('click', () => { drawQR().catch(err => alert('產生失敗：' + err)); });
-  els.text.addEventListener('keydown', (e) => { if (e.key === 'Enter') els.btnGen.click(); });
-
-  els.btnDownload.addEventListener('click', () => {
-    try {
-      const link = document.createElement('a');
-      link.download = 'qrcode.png';
-      link.href = els.canvas.toDataURL('image/png');
-      link.click();
-    } catch (e) {
-      alert('下載失敗：' + e);
+      await new Promise((resolve, reject) => {
+        QRCode.toCanvas(els.canvas, text, {
+          width: size,
+          margin: 4,
+          errorCorrectionLevel: 'M',
+          color: { dark: '#000000', light: '#ffffff' }
+        }, (err) => err ? reject(err) : resolve());
+      });
     }
-  });
 
-  // 首次載入自動產生一次
-  drawQR().catch(console.error);
-</script>
+    // 事件
+    els.btnGen.addEventListener('click', () => { drawQR().catch(err => alert('產生失敗：' + err)); });
+    els.text.addEventListener('keydown', (e) => { if (e.key === 'Enter') els.btnGen.click(); });
+    els.btnDownload.addEventListener('click', () => {
+      try {
+        const link = document.createElement('a');
+        link.download = 'qrcode.png';
+        link.href = els.canvas.toDataURL('image/png');
+        link.click();
+      } catch (e) { alert('下載失敗：' + e); }
+    });
+
+    // 首次載入自動產生一次
+    drawQR().catch(console.error);
+  </script>
 </body>
 </html>
