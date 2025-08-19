@@ -1,0 +1,302 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>QR Code 產生器｜置中 Logo 可縮放</title>
+  <link rel="preconnect" href="https://cdn.jsdelivr.net"/>
+  <style>
+    :root {
+      --bg:#0b1220; --card:#121a2b; --text:#ecf2ff; --muted:#9fb0d9; --accent:#4cc9f0; --ok:#22c55e;
+    }
+    * { box-sizing: border-box; }
+    html, body { height: 100%; }
+    body { margin: 0; font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Noto Sans, PingFang TC, Hiragino Sans, Arial; background: radial-gradient(1200px 800px at 10% 0%, #0f1830 0, #0b1220 60%); color: var(--text); }
+    .wrap { max-width: 1100px; margin: 32px auto; padding: 0 16px; display: grid; grid-template-columns: 360px 1fr; gap: 20px; }
+    .card { background: var(--card); border: 1px solid rgba(255,255,255,.06); border-radius: 16px; box-shadow: 0 10px 30px rgba(0,0,0,.3); padding: 18px; }
+    h1 { margin: 0 0 8px; font-size: 22px; letter-spacing:.2px; }
+    p.sub { margin: 0 0 16px; color: var(--muted); font-size: 13px; }
+    label { display: block; font-size: 13px; color: var(--muted); margin: 12px 0 6px; }
+    input[type="text"], input[type="number"], input[type="url"], select { width: 100%; padding: 10px 12px; border-radius: 12px; background: #0e1527; color: var(--text); border: 1px solid rgba(255,255,255,.08); outline: none; }
+    input[type="range"] { width: 100%; }
+    .row { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+    .btns { display:flex; gap:10px; flex-wrap: wrap; margin-top: 14px; }
+    button, .ghost {
+      appearance: none; border: 1px solid rgba(255,255,255,.12); background: linear-gradient(180deg, #1a2542, #101a31);
+      color: var(--text); border-radius: 12px; padding: 10px 14px; font-weight: 600; cursor: pointer; transition: .2s transform, .2s filter; text-decoration: none;
+    }
+    button:hover, .ghost:hover { filter: brightness(1.1); transform: translateY(-1px); }
+    .ghost { background: transparent; }
+    .preview { display:flex; align-items:center; justify-content:center; min-height: 520px; }
+    canvas { background: white; border-radius: 12px; }
+    .grid { display:grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+    .muted { color: var(--muted); font-size: 12px; }
+    .hint { font-size: 12px; color: #a1ffd6; margin-top: 4px; }
+  </style>
+  <!-- QR 產生：qrcode.js（純瀏覽器版） -->
+  <script src="https://cdn.jsdelivr.net/npm/qrcode@1.5.3/build/qrcode.min.js"></script>
+</head>
+<body>
+  <div class="wrap">
+    <section class="card">
+      <h1>QR Code 產生器</h1>
+      <p class="sub">支援置中 Logo、可拖動縮放大小，並提供 PNG 下載。</p>
+
+      <label>內容（網址 / 文字）</label>
+      <input id="text" type="text" placeholder="例如：https://example.com 或任何文字" value="https://example.com" />
+
+      <div class="row">
+        <div>
+          <label>尺寸（px）</label>
+          <input id="size" type="number" min="128" max="1024" step="32" value="512" />
+        </div>
+        <div>
+          <label>邊距（quiet zone, px）</label>
+          <input id="margin" type="number" min="0" max="32" step="2" value="4" />
+        </div>
+      </div>
+
+      <div class="row">
+        <div>
+          <label>前景色</label>
+          <input id="colorDark" type="text" value="#000000" />
+        </div>
+        <div>
+          <label>背景色</label>
+          <input id="colorLight" type="text" value="#ffffff" />
+        </div>
+      </div>
+
+      <div class="row">
+        <div>
+          <label>錯誤更正等級（ECC）</label>
+          <select id="ecc">
+            <option value="L">L（~7%）</option>
+            <option value="M">M（~15%）</option>
+            <option value="Q">Q（~25%）</option>
+            <option value="H" selected>H（~30%，適合蓋 Logo）</option>
+          </select>
+        </div>
+        <div>
+          <label>點陣縮放（scale）</label>
+          <input id="scale" type="number" min="2" max="16" step="1" value="8" />
+        </div>
+      </div>
+
+      <hr style="border-color: rgba(255,255,255,.06); margin: 14px 0;"/>
+
+      <label>Logo 檔案（PNG/JPG/SVG）</label>
+      <input id="logoFile" type="file" accept="image/*" />
+
+      <label>或使用 Logo 網址（可留空）</label>
+      <input id="logoUrl" type="url" placeholder="https://..." />
+
+      <label>Logo 大小（% 佔 QR 寬邊） <span id="logoSizeVal" class="muted">20%</span></label>
+      <input id="logoSize" type="range" min="0" max="40" step="1" value="20" />
+      <div class="grid">
+        <div>
+          <label>Logo 角落圓角（px）</label>
+          <input id="logoRadius" type="number" min="0" max="40" step="2" value="12" />
+        </div>
+        <div>
+          <label>Logo 背板留白（px）</label>
+          <input id="logoPad" type="number" min="0" max="40" step="2" value="6" />
+        </div>
+      </div>
+      <div class="hint">建議 ECC 選 H，Logo 大小 ≤ 30% 以免影響掃描。</div>
+
+      <div class="btns">
+        <button id="btnGen">重新產生</button>
+        <button id="btnDownload">下載 PNG</button>
+        <a id="btnCopy" class="ghost" href="#">複製圖片到剪貼簿</a>
+      </div>
+    </section>
+
+    <section class="card preview">
+      <canvas id="qrCanvas" width="512" height="512" aria-label="QR 預覽"></canvas>
+    </section>
+  </div>
+
+<script>
+  const els = {
+    text: document.getElementById('text'),
+    size: document.getElementById('size'),
+    margin: document.getElementById('margin'),
+    colorDark: document.getElementById('colorDark'),
+    colorLight: document.getElementById('colorLight'),
+    ecc: document.getElementById('ecc'),
+    scale: document.getElementById('scale'),
+    logoFile: document.getElementById('logoFile'),
+    logoUrl: document.getElementById('logoUrl'),
+    logoSize: document.getElementById('logoSize'),
+    logoSizeVal: document.getElementById('logoSizeVal'),
+    logoRadius: document.getElementById('logoRadius'),
+    logoPad: document.getElementById('logoPad'),
+    btnGen: document.getElementById('btnGen'),
+    btnDownload: document.getElementById('btnDownload'),
+    btnCopy: document.getElementById('btnCopy'),
+    canvas: document.getElementById('qrCanvas'),
+  };
+
+  let logoImage = null;
+
+  function loadLogoFromFile(file) {
+    return new Promise((resolve, reject) => {
+      if (!file) return resolve(null);
+      const reader = new FileReader();
+      reader.onload = () => {
+        const img = new Image();
+        img.onload = () => resolve(img);
+        img.onerror = reject;
+        img.src = reader.result;
+      };
+      reader.onerror = reject;
+      reader.readAsDataURL(file);
+    });
+  }
+
+  function loadLogoFromUrl(url) {
+    return new Promise((resolve, reject) => {
+      if (!url) return resolve(null);
+      const img = new Image();
+      // 允許跨網域圖片被畫到 canvas（若伺服器允許 CORS）
+      img.crossOrigin = 'anonymous';
+      img.onload = () => resolve(img);
+      img.onerror = () => reject(new Error('無法載入 Logo 圖片，請確認網址或 CORS 設定。'));
+      img.src = url;
+    });
+  }
+
+  function drawRoundRect(ctx, x, y, w, h, r) {
+    const radius = Math.min(r, w/2, h/2);
+    ctx.beginPath();
+    ctx.moveTo(x + radius, y);
+    ctx.arcTo(x + w, y, x + w, y + h, radius);
+    ctx.arcTo(x + w, y + h, x, y + h, radius);
+    ctx.arcTo(x, y + h, x, y, radius);
+    ctx.arcTo(x, y, x + w, y, radius);
+    ctx.closePath();
+  }
+
+  async function generate() {
+    const text = els.text.value || '';
+    const size = Math.max(128, Math.min(1024, +els.size.value || 512));
+    const margin = Math.max(0, Math.min(32, +els.margin.value || 4));
+    const colorDark = els.colorDark.value || '#000000';
+    const colorLight = els.colorLight.value || '#ffffff';
+    const errorCorrectionLevel = els.ecc.value || 'H';
+
+    // 先調整 canvas 實體尺寸
+    const canvas = els.canvas;
+    canvas.width = size;
+    canvas.height = size;
+
+    // 產生 QR 到 canvas
+    await QRCode.toCanvas(canvas, text, {
+      width: size,
+      margin,
+      errorCorrectionLevel,
+      color: { dark: colorDark, light: colorLight }
+    });
+
+    // 疊 Logo（可選）
+    const logoPct = +els.logoSize.value || 0; // 0~40
+    if (logoImage && logoPct > 0) {
+      const ctx = canvas.getContext('2d');
+      const logoSide = Math.round(size * (logoPct / 100));
+      const pad = Math.max(0, +els.logoPad.value || 0);
+      const radius = Math.max(0, +els.logoRadius.value || 0);
+
+      const x = Math.round((size - logoSide) / 2);
+      const y = Math.round((size - logoSide) / 2);
+
+      // 先畫白色背板，確保掃描對比；背板尺寸 = logo + 2*pad
+      if (pad > 0) {
+        ctx.save();
+        ctx.fillStyle = '#ffffff';
+        drawRoundRect(ctx, x - pad, y - pad, logoSide + pad*2, logoSide + pad*2, radius);
+        ctx.fill();
+        ctx.restore();
+      }
+
+      // 畫 Logo 圖
+      ctx.save();
+      // 若要讓 Logo 也有圓角，可用裁切
+      if (radius > 0) {
+        drawRoundRect(ctx, x, y, logoSide, logoSide, radius);
+        ctx.clip();
+      }
+      ctx.drawImage(logoImage, x, y, logoSide, logoSide);
+      ctx.restore();
+    }
+  }
+
+  // UI 綁定
+  els.btnGen.addEventListener('click', generate);
+
+  // 即時更新（簡易 debounce）
+  let t;
+  ['text','size','margin','colorDark','colorLight','ecc','scale','logoSize','logoRadius','logoPad']
+    .forEach(id => {
+      els[id].addEventListener('input', () => {
+        if (id === 'logoSize') {
+          els.logoSizeVal.textContent = els.logoSize.value + '%';
+        }
+        clearTimeout(t); t = setTimeout(generate, 120);
+      });
+    });
+
+  els.logoFile.addEventListener('change', async (e) => {
+    try {
+      const img = await loadLogoFromFile(e.target.files?.[0]);
+      if (img) logoImage = img; else if (!els.logoUrl.value) logoImage = null;
+      generate();
+    } catch (err) { alert(err.message || err); }
+  });
+
+  els.logoUrl.addEventListener('change', async () => {
+    try {
+      if (els.logoUrl.value) {
+        logoImage = await loadLogoFromUrl(els.logoUrl.value);
+      } else if (!els.logoFile.files?.length) {
+        logoImage = null;
+      }
+      generate();
+    } catch (err) { alert(err.message || err); }
+  });
+
+  // 下載 PNG
+  els.btnDownload.addEventListener('click', () => {
+    const link = document.createElement('a');
+    link.download = 'qrcode.png';
+    link.href = els.canvas.toDataURL('image/png');
+    link.click();
+  });
+
+  // 複製圖片
+  els.btnCopy.addEventListener('click', async (e) => {
+    e.preventDefault();
+    try {
+      const blob = await new Promise(res => els.canvas.toBlob(res, 'image/png'));
+      await navigator.clipboard.write([
+        new ClipboardItem({ 'image/png': blob })
+      ]);
+      els.btnCopy.textContent = '已複製 ✔';
+      setTimeout(() => els.btnCopy.textContent = '複製圖片到剪貼簿', 1500);
+    } catch (err) {
+      alert('無法複製，請改用下載 PNG。');
+    }
+  });
+
+  // 初始載入
+  (async () => {
+    // 給一個預設的示意 Logo（資料 URL 可離線使用）
+    const demoSvg = `data:image/svg+xml;utf8,${encodeURIComponent(`<svg xmlns='http://www.w3.org/2000/svg' width='256' height='256' viewBox='0 0 256 256'><defs><linearGradient id='g' x1='0' y1='0' x2='1' y2='1'><stop stop-color='%234cc9f0'/><stop offset='1' stop-color='%2322c55e'/></linearGradient></defs><rect width='256' height='256' rx='48' fill='url(%23g)'/><g fill='white'><circle cx='88' cy='104' r='16'/><circle cx='168' cy='104' r='16'/><path d='M64 168c16 24 48 24 64 0' fill='none' stroke='white' stroke-width='16' stroke-linecap='round'/><path d='M128 168c16 24 48 24 64 0' fill='none' stroke='white' stroke-width='16' stroke-linecap='round'/></g></svg>`)}`;
+    const img = new Image();
+    img.onload = () => { logoImage = img; generate(); };
+    img.src = demoSvg;
+    els.logoSizeVal.textContent = els.logoSize.value + '%';
+  })();
+</script>
+</body>
+</html>
