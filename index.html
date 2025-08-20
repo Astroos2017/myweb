@@ -3,24 +3,24 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>QR Code 產生器（含 Logo）</title>
+  <title>QR Code 產生器（含 Logo） v0.4</title>
   <style>
-    body{font-family:system-ui,-apple-system,BlinkMacSystemFont,Segoe UI,Roboto; margin:0; background:#f5f7fb; color:#111}
+    :root{--border:#e5e8f0;--bg:#f5f7fb;--brand:#19a0ff;--muted:#667}
+    body{font-family:system-ui,-apple-system,BlinkMacSystemFont,Segoe UI,Roboto; margin:0; background:var(--bg); color:#111}
     .wrap{max-width:980px; margin:32px auto; padding:0 16px; display:grid; grid-template-columns: 1fr 1fr; gap:16px}
-    .card{background:#fff; border:1px solid #e5e8f0; border-radius:12px; padding:16px}
+    .card{background:#fff; border:1px solid var(--border); border-radius:12px; padding:16px}
     h1{margin:0 0 8px}
     label{display:block; font-size:14px; color:#555; margin:8px 0 6px}
     input[type=text], input[type=number], input[type=url]{width:100%; padding:10px 12px; border:1px solid #cfd6e4; border-radius:10px; outline:none}
     input[type=range]{width:100%}
     .btns{display:flex; gap:8px; margin-top:12px; flex-wrap:wrap}
-    button{appearance:none; border:0; background:#19a0ff; color:#fff; border-radius:10px; padding:10px 14px; font-weight:600; cursor:pointer}
+    button{appearance:none; border:0; background:var(--brand); color:#fff; border-radius:10px; padding:10px 14px; font-weight:600; cursor:pointer}
     .ghost{background:#eef6ff; color:#0a66b7}
     .preview{min-height:420px; display:flex; align-items:center; justify-content:center}
     #qrContainer canvas{border-radius:8px; box-shadow:0 2px 10px rgba(0,0,0,.06)}
-    .muted{font-size:12px; color:#667}
+    .muted{font-size:12px; color:var(--muted)}
+    .ver{font-size:12px; color:var(--muted); text-align:right; margin-top:6px}
   </style>
-
-  <!-- 使用 repo 內的 qrcodejs（本地檔，不走 CDN） -->
   <script src="./davidshimjs-qrcodejs-04f46c6/qrcode.min.js"></script>
 </head>
 <body>
@@ -32,8 +32,8 @@
       <input id="text" type="text" placeholder="https://example.com" value="https://example.com" />
 
       <label for="size">尺寸 (px)</label>
-      <input id="size" type="number" min="128" max="1024" step="32" value="400"/>
-      <div class="muted">建議 256–512。錯誤更正等級固定使用 H（適合放 Logo）。</div>
+      <input id="size" type="number" min="128" max="2048" step="32" value="400"/>
+      <div class="muted">建議 256–512。錯誤更正等級使用 H（適合放 Logo）。</div>
 
       <hr>
 
@@ -44,13 +44,19 @@
       <input id="logoUrl" type="url" placeholder="https://..."/>
 
       <label for="logoPct">Logo 大小（% 相對於 QR 寬邊） <span id="logoPctVal" class="muted">20%</span></label>
-      <input id="logoPct" type="range" min="0" max="40" step="1" value="20"/>
+      <input id="logoPct" type="range" min="0" max="60" step="1" value="20"/>
+      <div class="muted">提示：過大會影響掃描率，建議 ≤ 30%。</div>
+
+      <hr>
+
+      <label>外框設定</label>
+      <div class="muted">自動為 QR 最外圍加上 <strong>2%</strong> 尺寸的白色邊框（無條件進位為整數像素）。</div>
 
       <div class="btns">
         <button id="btnGen">重新產生</button>
         <button id="btnDownload" class="ghost">下載 PNG</button>
       </div>
-      <div class="muted" style="margin-top:6px">小提醒：Logo 過大會影響掃描率，建議 ≤ 30%。</div>
+      <div class="ver">版本 <span id="verText">v0.4</span></div>
     </section>
 
     <section class="card preview">
@@ -59,6 +65,9 @@
   </div>
 
 <script>
+  const VERSION = 'v0.4';
+  document.getElementById('verText').textContent = VERSION;
+
   const els = {
     text: document.getElementById('text'),
     size: document.getElementById('size'),
@@ -77,12 +86,7 @@
     return new Promise((resolve, reject) => {
       if (!file) return resolve(null);
       const reader = new FileReader();
-      reader.onload = () => {
-        const img = new Image();
-        img.onload = () => resolve(img);
-        img.onerror = () => reject(new Error('無法讀取選取的圖片檔'));
-        img.src = reader.result;
-      };
+      reader.onload = () => { const img = new Image(); img.onload = () => resolve(img); img.onerror = () => reject(new Error('無法讀取選取的圖片檔')); img.src = reader.result; };
       reader.onerror = () => reject(new Error('讀取檔案失敗'));
       reader.readAsDataURL(file);
     });
@@ -92,19 +96,17 @@
     return new Promise((resolve, reject) => {
       if (!url) return resolve(null);
       const img = new Image();
-      img.crossOrigin = 'anonymous'; // 盡量避免 tainted canvas（需對方伺服器允許）
+      img.crossOrigin = 'anonymous';
       img.onload = () => resolve(img);
       img.onerror = () => reject(new Error('無法載入 Logo 網址（可能 CORS 或 URL 錯誤）'));
       img.src = url;
     });
   }
 
-  // 若 qrcodejs 產生的是 <img>，轉為 <canvas> 後回傳；若本來就是 canvas 直接回傳
   function ensureCanvasFromContainer(container){
     const img = container.querySelector('img');
     const canvas = container.querySelector('canvas');
     if (canvas) return canvas;
-
     if (img) {
       const c = document.createElement('canvas');
       c.width = img.naturalWidth || img.width;
@@ -116,52 +118,7 @@
       return c;
     }
     return null;
-    }
-
-  // 在 canvas 置中疊上 logo（含簡單白色背板，提高對比）
-  // function drawLogoOnCanvas(canvas){
-  //   if (!canvas || !logoImage) return;
-  //   const pct = +els.logoPct.value || 0;
-  //   if (pct <= 0) return;
-
-  //   const ctx = canvas.getContext('2d');
-  //   const side = Math.round(Math.min(canvas.width, canvas.height) * (pct/100));
-  //   const x = Math.round((canvas.width - side)/2);
-  //   const y = Math.round((canvas.height - side)/2);
-
-  //   // 白色背板（小留白，提升掃描率）
-  //   const pad = Math.max(2, Math.round(side * 0.08)); // 約 8% 留白
-  //   ctx.save();
-  //   ctx.fillStyle = '#ffffff';
-  //   roundRect(ctx, x - pad, y - pad, side + pad*2, side + pad*2, Math.round(side * 0.12));
-  //   ctx.fill();
-  //   ctx.restore();
-
-  //   // 圓角裁切再畫 logo
-  //   ctx.save();
-  //   roundRect(ctx, x, y, side, side, Math.round(side * 0.12));
-  //   ctx.clip();
-  //   ctx.drawImage(logoImage, x, y, side, side);
-  //   ctx.restore();
-  // }
-  function drawLogoOnCanvas(canvas){
-  if (!canvas || !logoImage) return;
-  const pct = +els.logoPct.value || 0;
-  if (pct <= 0) return;
-
-  const ctx = canvas.getContext('2d');
-  const side = Math.round(Math.min(canvas.width, canvas.height) * (pct/100));
-  const x = Math.round((canvas.width - side)/2);
-  const y = Math.round((canvas.height - side)/2);
-
-  // 直接畫 Logo，不加白色背板
-  ctx.save();
-  roundRect(ctx, x, y, side, side, Math.round(side * 0.12)); // 仍保留圓角裁切
-  ctx.clip();
-  ctx.drawImage(logoImage, x, y, side, side);
-  ctx.restore();
-}
-
+  }
 
   function roundRect(ctx, x, y, w, h, r){
     const radius = Math.max(0, Math.min(r, w/2, h/2));
@@ -174,12 +131,43 @@
     ctx.closePath();
   }
 
+  // 僅疊 Logo（保持透明背景）
+  function drawLogoOnCanvas(canvas){
+    if (!canvas || !logoImage) return;
+    const pct = +els.logoPct.value || 0;
+    if (pct <= 0) return;
+
+    const ctx = canvas.getContext('2d');
+    const side = Math.round(Math.min(canvas.width, canvas.height) * (pct/100));
+    const x = Math.round((canvas.width - side)/2);
+    const y = Math.round((canvas.height - side)/2);
+
+    ctx.save();
+    roundRect(ctx, x, y, side, side, Math.round(side * 0.12));
+    ctx.clip();
+    ctx.drawImage(logoImage, x, y, side, side);
+    ctx.restore();
+  }
+
+  // 依尺寸加 2% 白色邊框（向上取整），回傳新 canvas
+  function addWhiteBorder(canvas, baseSize){
+    const border = Math.ceil(baseSize * 0.02); // 無條件進位
+    if (border <= 0) return canvas;
+    const out = document.createElement('canvas');
+    out.width = canvas.width + border * 2;
+    out.height = canvas.height + border * 2;
+    const ctx = out.getContext('2d');
+    ctx.fillStyle = '#ffffff';
+    ctx.fillRect(0, 0, out.width, out.height);
+    ctx.drawImage(canvas, border, border);
+    return out;
+  }
+
   function drawQR(){
     const text = els.text.value || ' ';
-    const size = Math.max(128, Math.min(1024, +els.size.value || 400));
+    const size = Math.max(128, Math.min(2048, +els.size.value || 400));
 
     els.box.innerHTML = '';
-    // 用本地 qrcodejs 產生（錯誤更正等級使用 H）
     new QRCode(els.box, {
       text, width: size, height: size,
       colorDark: '#000000',
@@ -187,51 +175,31 @@
       correctLevel: QRCode.CorrectLevel.H
     });
 
-    // 等瀏覽器把節點掛上後再疊 Logo
     requestAnimationFrame(() => {
-      const canvas = ensureCanvasFromContainer(els.box);
-      if (canvas) drawLogoOnCanvas(canvas);
+      let canvas = ensureCanvasFromContainer(els.box);
+      if (!canvas) return;
+      // 疊 Logo
+      drawLogoOnCanvas(canvas);
+      // 加外框
+      canvas = addWhiteBorder(canvas, size);
+      els.box.innerHTML = '';
+      els.box.appendChild(canvas);
     });
   }
 
   // 事件
-  els.btnGen.addEventListener('click', () => {
-    try { drawQR(); } catch (err) { alert('產生失敗：' + err); }
-  });
-
+  els.btnGen.addEventListener('click', () => { try { drawQR(); } catch (err) { alert('產生失敗：' + err); } });
   els.text.addEventListener('keydown', (e) => { if (e.key === 'Enter') els.btnGen.click(); });
-  els.logoPct.addEventListener('input', () => {
-    els.logoPctVal.textContent = els.logoPct.value + '%';
-    // 即時調整：重畫一次（省事做法，避免演算法累積誤差）
-    drawQR();
-  });
-
-  els.logoFile.addEventListener('change', async (e) => {
-    try {
-      logoImage = await loadLogoFromFile(e.target.files?.[0]);
-      drawQR();
-    } catch (err) { alert(err.message || err); }
-  });
-
-  els.logoUrl.addEventListener('change', async (e) => {
-    try {
-      logoImage = await loadLogoFromUrl(e.target.value);
-      drawQR();
-    } catch (err) { alert(err.message || err); }
-  });
-
+  els.logoPct.addEventListener('input', () => { els.logoPctVal.textContent = els.logoPct.value + '%'; drawQR(); });
+  els.logoFile.addEventListener('change', async (e) => { try { logoImage = await loadLogoFromFile(e.target.files?.[0]); drawQR(); } catch (err) { alert(err.message || err); } });
+  els.logoUrl.addEventListener('change', async (e) => { try { logoImage = await loadLogoFromUrl(e.target.value); drawQR(); } catch (err) { alert(err.message || err); } });
   els.btnDownload.addEventListener('click', () => {
     const canvas = els.box.querySelector('canvas');
     if (!canvas) { alert('尚未產生 QR，或瀏覽器未使用 canvas 呈現。'); return; }
-    try {
-      const a = document.createElement('a');
-      a.download = 'qrcode.png';
-      a.href = canvas.toDataURL('image/png');
-      a.click();
-    } catch (e) { alert('下載失敗：' + e); }
+    try { const a = document.createElement('a'); a.download = 'qrcode.png'; a.href = canvas.toDataURL('image/png'); a.click(); } catch (e) { alert('下載失敗：' + e); }
   });
 
-  // 初始載入先畫一次（無 Logo）
+  // 初始
   els.logoPctVal.textContent = els.logoPct.value + '%';
   drawQR();
 </script>
